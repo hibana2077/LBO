@@ -1,0 +1,6 @@
+# Import experiment modules
+from .mnist_logistic import experiment1_logistic_regression_mnist
+from .imdb_logistic import experiment2_logistic_regression_imdb
+from .mnist_mlp import experiment3_multilayer_nn
+from .cifar10_cnn import experiment4_convnet_cifar10
+from .mnist_vae import experiment5_vae
