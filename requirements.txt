@@ -3,7 +3,5 @@ pytorch-optimizer
 pandas
 scikit-learn
 numpy
-torch
-torchvision
 matplotlib
 tqdm
