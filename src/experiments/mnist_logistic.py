@@ -26,6 +26,7 @@ def experiment1_logistic_regression_mnist():
     # Initialize model
     input_dim = 28 * 28
     num_classes = 10
+    print(f"Input dimension: {input_dim}, Number of classes: {num_classes}")
     model = LogisticRegression(input_dim, num_classes).to(device)
     
     # Get optimizers

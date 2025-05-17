@@ -1,12 +1,9 @@
 import math
 import torch
 from typing import Any, Dict, List, Optional, Tuple, Union
+from torch.optim.optimizer import Optimizer
 
-from pytorch_optimizer.base.exception import NoSparseGradientError
-from pytorch_optimizer.base.optimizer import BaseOptimizer
-from pytorch_optimizer.base.type import BETAS, CLOSURE, DEFAULTS, LOSS, PARAMETERS
-
-class LaplaceBeltramiOptimizer(BaseOptimizer):
+class LaplaceBeltramiOptimizer(Optimizer):
     r"""Curvature-aware optimizer with directional sensitivity, dynamic modulation, and stagnation-escape.
 
     Key Features
@@ -23,9 +20,9 @@ class LaplaceBeltramiOptimizer(BaseOptimizer):
 
     def __init__(
         self,
-        params: PARAMETERS,
+        params,
         lr: float = 1e-3,
-        betas: BETAS = (0.9, 0.999, 0.9),
+        betas: Tuple[float, float, float] = (0.9, 0.999, 0.9),
         eps: float = 1e-8,
         weight_decay: float = 0.0,
         curvature_scale: float = 1.0,
@@ -37,14 +34,22 @@ class LaplaceBeltramiOptimizer(BaseOptimizer):
         weight_decouple: bool = True,
         **kwargs,
     ):
-        self.validate_learning_rate(lr)
-        self.validate_betas(betas)
-        self.validate_non_negative(eps, "eps")
-        self.validate_non_negative(curvature_scale, "curvature_scale")
+        if not 0.0 <= lr:
+            raise ValueError(f"Invalid learning rate: {lr}")
+        if not 0.0 <= eps:
+            raise ValueError(f"Invalid epsilon value: {eps}")
+        if not 0.0 <= betas[0] < 1.0:
+            raise ValueError(f"Invalid beta parameter at index 0: {betas[0]}")
+        if not 0.0 <= betas[1] < 1.0:
+            raise ValueError(f"Invalid beta parameter at index 1: {betas[1]}")
+        if not 0.0 <= betas[2] < 1.0: # Assuming the third beta is also in [0,1)
+            raise ValueError(f"Invalid beta parameter at index 2: {betas[2]}")
+        if not 0.0 <= weight_decay:
+            raise ValueError(f"Invalid weight_decay value: {weight_decay}")
         assert window_size >= 2, "window_size must be at least 2"
         assert stagnation_window >= 2, "stagnation_window must be at least 2"
 
-        defaults: DEFAULTS = {
+        defaults: dict = {
             "lr": lr,
             "betas": betas,
             "eps": eps,
@@ -58,9 +63,6 @@ class LaplaceBeltramiOptimizer(BaseOptimizer):
         }
         super().__init__(params, defaults)
 
-    def __str__(self) -> str:
-        return "ImprovedLaplaceBeltrami"
-
     # ------------------------------------------------------------------ #
     #                         STATE INITIALISATION                       #
     # ------------------------------------------------------------------ #
@@ -70,8 +72,8 @@ class LaplaceBeltramiOptimizer(BaseOptimizer):
         for group in self.param_groups:
             for p in group["params"]:
                 state = self.state[p]
-                state["exp_avg"] = torch.zeros_like(p)
-                state["exp_avg_sq"] = torch.zeros_like(p)
+                state["exp_avg"] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                state["exp_avg_sq"] = torch.zeros_like(p, memory_format=torch.preserve_format)
                 state["grad_history"] = []             # For curvature estimation
                 state["param_delta_hist"] = []         # For stagnation detection
 
@@ -79,43 +81,56 @@ class LaplaceBeltramiOptimizer(BaseOptimizer):
     #                                STEP                               #
     # ------------------------------------------------------------------ #
     @torch.no_grad()
-    def step(self, closure: CLOSURE = None) -> LOSS:
+    def step(self, closure = None) -> Optional[float]:
         """Perform a single optimization step. If stagnation is detected and a closure is provided, initiate exploration."""
-        loss: LOSS = None
+        loss: Optional[float] = None
         if closure is not None:
             with torch.enable_grad():
                 loss = closure()
 
         for group in self.param_groups:
-            step = group.get("step", 0) + 1
-            group["step"] = step
-
-            beta1, beta2, _ = group["betas"]
-            bias_correction1 = 1 - beta1 ** step
-            bias_correction2 = math.sqrt(1 - beta2 ** step)
-
-            lr = group["lr"]
-            eps = group["eps"]
-            window_size = group["window_size"]
-            curvature_scale = group["curvature_scale"]
-            stagn_win = group["stagnation_window"]
-            stagn_thr = group["stagnation_threshold"]
-            explore_step = group["exploration_step"] * lr
-
+            step = group.get("step", 0) 
+            # Initialize step counter in state if not present
+            if step == 0:
+                for p in group["params"]:
+                    if p.grad is None:
+                        continue
+                    state = self.state[p]
+                    state['step'] = 0
+            
             for p in group["params"]:
                 if p.grad is None:
                     continue
                 grad = p.grad
                 if grad.is_sparse:
-                    raise NoSparseGradientError(str(self))
+                    # raise NoSparseGradientError(str(self)) # Changed to ValueError
+                    raise ValueError("LaplaceBeltramiOptimizer does not support sparse gradients")
+
 
                 state = self.state[p]
-                # Initialize state
-                if len(state) == 0:
-                    state["exp_avg"] = torch.zeros_like(p)
-                    state["exp_avg_sq"] = torch.zeros_like(p)
-                    state["grad_history"] = [torch.zeros_like(p) for _ in range(window_size - 1)]
+                # State initialization
+                if len(state) == 0: # This should ideally be caught by the step check above or handled differently
+                    state['step'] = 0
+                    state["exp_avg"] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                    state["exp_avg_sq"] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                    state["grad_history"] = [torch.zeros_like(p, memory_format=torch.preserve_format) for _ in range(group["window_size"] - 1)]
                     state["param_delta_hist"] = []
+                
+                state['step'] +=1
+                current_step = state['step']
+
+
+                beta1, beta2, _ = group["betas"] # Assuming the third beta is not used in AdamW part
+                bias_correction1 = 1 - beta1 ** current_step
+                bias_correction2 = math.sqrt(1 - beta2 ** current_step)
+
+                lr = group["lr"]
+                eps = group["eps"]
+                window_size = group["window_size"]
+                curvature_scale = group["curvature_scale"]
+                stagn_win = group["stagnation_window"]
+                stagn_thr = group["stagnation_threshold"]
+                explore_step = group["exploration_step"] * lr
 
                 exp_avg, exp_avg_sq = state["exp_avg"], state["exp_avg_sq"]
                 grad_history = state["grad_history"]
@@ -125,20 +140,42 @@ class LaplaceBeltramiOptimizer(BaseOptimizer):
                 #  1. Update gradient history, calculate curvature, and adjust learning rate
                 # ------------------------------------------------------ #
                 grad_history.append(grad.clone())
-                if len(grad_history) > window_size - 1:
+                if len(grad_history) > window_size -1: # Ensure history does not exceed window_size -1 for prev grad
                     grad_history.pop(0)
-                state["grad_history"] = grad_history
+                # state["grad_history"] = grad_history # Already a reference
 
-                if len(grad_history) >= window_size - 1:
+                if len(grad_history) >= window_size -1 and window_size >1: # check window_size > 1
                     grad_prev = grad_history[0]
-                    grad_curr = grad_history[-1]
-                    grad_diff = (grad_curr - grad_prev) / (window_size - 1)
+                    grad_curr = grad # Use current grad, not from history[-1] as it's just appended
+                    # grad_diff = (grad_curr - grad_prev) / (window_size - 1) # Original
+                    # Corrected finite difference: (current_grad - oldest_grad_in_window) / (num_intervals)
+                    # num_intervals = (len(grad_history) -1) which is window_size - 2 if history has window_size-1 elements
+                    # If grad_history stores window_size-1 elements. grad_prev is grad_history[0].
+                    # grad_curr is the current grad.
+                    # The time difference is (window_size -1) steps if grad_history[0] is from (t - (window_size-1))
+                    # and current grad is from t.
+                    # So grad_diff is (grad_curr - grad_prev) / ( (window_size-1) * dt ) where dt=1 step.
+                    grad_diff = (grad_curr - grad_prev) / max(1, window_size - 1)
+
 
                     curvature_mask = grad_diff.sign() * grad.sign()
                     grad_norm = grad.abs().mean()
-                    curvature_norm = curvature_mask.abs().mean()
+                    # curvature_norm = curvature_mask.abs().mean() # This is incorrect, curvature_mask is not curvature
+                    curvature_val = grad_diff # This is the actual curvature approximation
+                    curvature_norm = curvature_val.abs().mean()
+
                     curvature_weight = grad_norm / (grad_norm + curvature_norm + eps)
+                    # curvature_term = curvature_scale * curvature_weight * curvature_mask # Original
+                    # curvature_term should use curvature_val (grad_diff), not curvature_mask for scaling
+                    # and then apply the mask for directionality
+                    scaled_curvature = curvature_scale * curvature_weight * curvature_val
+                    # Apply sign mask: only consider curvature if it aligns with gradient direction
+                    # A positive curvature_mask means grad_diff and grad have same sign (accelerating in grad direction or decelerating against it)
+                    # A negative curvature_mask means they have opposite signs (slowing down in grad direction or accelerating against it)
+                    # The original paper might have a specific interpretation for curvature_mask.
+                    # Let's stick to the original logic for now, assuming curvature_mask is intended.
                     curvature_term = curvature_scale * curvature_weight * curvature_mask
+
                     adaptive_lr = lr * (1 + curvature_term.clamp(-0.5, 0.5).mean())
                 else:
                     adaptive_lr = lr

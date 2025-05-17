@@ -11,6 +11,7 @@ def get_optimizers(params, experiment):
     Returns:
         dict: Dictionary of optimizer instances keyed by name
     """
+    params = list(params)
     optimizers = {}
     
     # Base learning rate for each experiment
