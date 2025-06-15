@@ -16,13 +16,14 @@ def get_optimizers(params, experiment):
     
     # Base learning rate for each experiment
     lr = 0.001
+    LBO_LR = 0.45
     
     if experiment == 1:  # Logistic Regression on MNIST
         optimizers = {
             'Adam': optim.Adam(params, lr=lr),
             'Adagrad': optim.Adagrad(params, lr=lr),
             'SGD_Nesterov': optim.SGD(params, lr=lr, momentum=0.9, nesterov=True),
-            'LBO': LaplaceBeltramiOptimizer(params, lr=lr)
+            'LBO': LaplaceBeltramiOptimizer(params, lr=LBO_LR)
         }
     elif experiment == 2:  # Logistic Regression on IMDB
         optimizers = {
@@ -30,7 +31,7 @@ def get_optimizers(params, experiment):
             'Adagrad': optim.Adagrad(params, lr=lr),
             'RMSprop': optim.RMSprop(params, lr=lr),
             'SGD_Nesterov': optim.SGD(params, lr=lr, momentum=0.9, nesterov=True),
-            'LBO': LaplaceBeltramiOptimizer(params, lr=lr)
+            'LBO': LaplaceBeltramiOptimizer(params, lr=LBO_LR)
         }
     elif experiment == 3:  # Multilayer Neural Network
         optimizers = {
@@ -39,14 +40,14 @@ def get_optimizers(params, experiment):
             'Adagrad': optim.Adagrad(params, lr=lr),
             'RMSprop': optim.RMSprop(params, lr=lr),
             'SGD_Nesterov': optim.SGD(params, lr=lr, momentum=0.9, nesterov=True),
-            'LBO': LaplaceBeltramiOptimizer(params, lr=lr)
+            'LBO': LaplaceBeltramiOptimizer(params, lr=LBO_LR)
         }
     elif experiment == 4:  # Convolutional Neural Network
         optimizers = {
             'Adam': optim.Adam(params, lr=lr),
             'Adagrad': optim.Adagrad(params, lr=lr),
             'SGD_Nesterov': optim.SGD(params, lr=lr, momentum=0.9, nesterov=True),
-            'LBO': LaplaceBeltramiOptimizer(params, lr=lr)
+            'LBO': LaplaceBeltramiOptimizer(params, lr=LBO_LR)
         }
     elif experiment == 5:  # Variational Auto-Encoder
         # Standard Adam
@@ -68,6 +69,6 @@ def get_optimizers(params, experiment):
         optimizers['Adam_lr_0.0001'] = optim.Adam(params, lr=0.0001)
         
         # LBO
-        optimizers['LBO'] = LaplaceBeltramiOptimizer(params, lr=lr)
+        optimizers['LBO'] = LaplaceBeltramiOptimizer(params, lr=LBO_LR)
     
     return optimizers

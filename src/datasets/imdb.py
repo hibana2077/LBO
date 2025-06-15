@@ -42,7 +42,7 @@ def load_imdb():
     train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
     test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
     
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=4096, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=4096, shuffle=False)
     
     return train_loader, test_loader

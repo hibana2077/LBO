@@ -16,7 +16,7 @@ def load_mnist():
     train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transform)
     test_dataset = datasets.MNIST('./data', train=False, transform=transform)
     
-    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=4096, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=4096, shuffle=False)
     
     return train_loader, test_loader
